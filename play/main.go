@@ -75,10 +75,27 @@ func testRouter() {
 	}
 }
 
+func testFileServer() {
+	r := simplehttp.NewPrefixRouter("/")
+	r.Use(simplehttp.Logger, simplehttp.Recovery)
+
+	r.GET("/static/", simplehttp.FileServer(
+		"/Users/c/Learning/ucas2022fall/cn/all-exps/05-http_server",
+		"/static",
+	))
+
+	s := simplehttp.HttpServer{Handler: r}
+	fmt.Printf("[testFileServer] Listen and serve on %v\n", ":20227")
+	if err := s.ListenAndServe(":20227"); err != nil {
+		panic(err)
+	}
+}
+
 func main() {
 	// go testHttp()
 	// go testHttps()
-	go testRouter()
+	// go testRouter()
+	go testFileServer()
 
 	select {}
 }

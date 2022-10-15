@@ -1,11 +1,20 @@
 package simplehttp
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	pathLib "path"
+	"regexp"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
+)
+
+const (
+	IndexFile = "index.html"
 )
 
 // region Handler: echo
@@ -40,7 +49,161 @@ func echoHandler(c *Context) {
 
 // region Handler: FileServer
 
-// TODO: FileServer is a Handler
+// FileServer is a Handler that serves HTTP requests with the contents of the
+// file system rooted at root. Supports HTTP/1.1 Range ([RFC 9110 Section 14]).
+//
+//	GET prefix/dir/index.html
+//	=>  root/dir/index.html
+//
+// [RFC 9110 Section 14]: https://www.rfc-editor.org/rfc/rfc9110#name-range-requests
+func FileServer(root string, prefix string) HandlerFunc {
+	return func(c *Context) {
+		path := strings.TrimPrefix(c.Request.Url, prefix)
+		if strings.HasSuffix(path, "/") {
+			path = pathLib.Join(path, IndexFile)
+		}
+		path = pathLib.Join(root, path)
+
+		serveFile(c, path)
+	}
+}
+
+// serveFile writes the contents of the file to the c,
+// with HTTP/1.1 Range supports.
+func serveFile(c *Context, path string) {
+	// open file
+	f, err := os.Open(path)
+	if err != nil {
+		c.ResponseText(500, "Internal Server Error")
+		return
+	}
+	defer f.Close()
+
+	// get file info
+	stat, err := f.Stat()
+	if errors.Is(err, os.ErrNotExist) {
+		c.ResponseText(404, "Not Found")
+		return
+	}
+
+	// check file stat
+	if errors.Is(err, os.ErrPermission) {
+		c.ResponseText(403, "Forbidden")
+		return
+	}
+	if err != nil {
+		c.ResponseText(500, "Internal Server Error")
+		return
+	}
+	if stat.IsDir() {
+		c.ResponseText(403, "not a file")
+		return
+	}
+
+	// HTTP/1.1 Range support
+	var start, end int64 = 0, stat.Size()
+	rangeHeader, isRange := c.Request.Headers["Range"]
+	if isRange {
+		c.Response.Headers["Accept-Ranges"] = "bytes"
+		s, e, err := parseRange(c, rangeHeader, stat.Size())
+		if err != nil {
+			return
+		}
+		start, end = s, e
+	}
+	//  else if end-start > 1024*1024 { // 1MB
+	// 	// c.Response.SetStateLine()
+	// 	c.Response.Headers["Accept-Ranges"] = "bytes"
+	// }
+
+	// stop
+	if start == end {
+		c.Response.SetStateLine(c.Request.Version, 200)
+		c.Response.Headers["Content-Type"] = mimeType(path)
+		c.Response.Headers["Content-Length"] = "0"
+		return
+	}
+
+	if start < 0 || end > stat.Size() {
+		c.ResponseText(416, "range not satisfiable")
+		return
+	}
+
+	// set response headers
+	if isRange {
+		c.Response.SetStateLine(c.Request.Version, 206)
+		c.Response.Headers["Content-Range"] = fmt.Sprintf("bytes %d-%d/%d", start, end, stat.Size())
+		c.Response.Headers["Accept-Ranges"] = "bytes"
+	} else {
+		c.Response.SetStateLine(c.Request.Version, 200)
+	}
+
+	c.Response.Headers["Content-Length"] = fmt.Sprintf("%d", end-start)
+	c.Response.Headers["Content-Type"] = mimeType(path)
+
+	// write response body: file content
+	_, _ = f.Seek(start, io.SeekStart)
+	_, _ = io.CopyN(c.Response.Body, f, end-start)
+}
+
+// parseRange: bytes=0-100
+func parseRange(c *Context, rangeHeader string, fileSize int64) (start, end int64, err error) {
+	rangeRegexp := regexp.MustCompile(`bytes=(\d*)\-(\d*)`)
+
+	if !rangeRegexp.MatchString(rangeHeader) {
+		c.ResponseText(400, "bad request")
+		return 0, 0, errors.New("bad request")
+	}
+
+	matches := rangeRegexp.FindStringSubmatch(rangeHeader)
+	// fmt.Println(matches)
+	if len(matches) < 3 { // ["bytes=0-1", "0", "1"]
+		c.ResponseText(400, "bad request")
+		return 0, 0, errors.New("bad request")
+	}
+
+	// let's parse end first, and then start, make it easier
+	if matches[2] != "" {
+		end, _ = strconv.ParseInt(matches[2], 10, 64)
+	} else { // bytes=9500-  =>  The final 500 bytes (byte offsets 9500-9999, inclusive)
+		end = fileSize - 1
+	}
+
+	if matches[1] != "" {
+		start, _ = strconv.ParseInt(matches[1], 10, 64)
+	} else { // bytes=-500  =>  The final 500 bytes (byte offsets 9500-9999, inclusive)
+		start = fileSize - end
+	}
+
+	return start, end, nil
+}
+
+func mimeType(path string) string {
+	switch pathLib.Ext(path) {
+	case ".html", ".htm":
+		return "text/html"
+	case ".css":
+		return "text/css"
+	case ".js":
+		return "application/javascript"
+	case ".json":
+		return "application/json"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".txt":
+		return "text/plain"
+	case ".mp4":
+		return "video/mp4"
+	default:
+		return "application/octet-stream"
+	}
+}
 
 // endregion  Handler: FileServer
 
