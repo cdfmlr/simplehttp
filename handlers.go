@@ -38,12 +38,6 @@ func echoHandler(c *Context) {
 
 // endregion Handler: echo
 
-// region Handler: Router
-
-// TODO: Router is a Handler
-
-// endregion  Handler: Router
-
 // region Handler: FileServer
 
 // TODO: FileServer is a Handler
