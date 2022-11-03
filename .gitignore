@@ -160,3 +160,5 @@ go.work
 # Others
 /.idea/
 /.fleet/
+expMininet
+diagram-part.puml

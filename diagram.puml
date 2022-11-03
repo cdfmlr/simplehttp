@@ -1,0 +1,159 @@
+@startuml
+skinparam linetype ortho
+namespace simplehttp {
+    class Context << (S,Aquamarine) >> {
+        - values sync.Map
+        - handlers []Handler
+        - currentHandlerIndex int
+
+        + Request *Request
+        + Response *Response
+
+        - setChain(chain []Handler) 
+
+        + Set(key string, value <font color=blue>interface</font>{}) 
+        + Get(key string) (<font color=blue>interface</font>{}, bool)
+        + Delete(key string) 
+        + ResponseText(status int, text string) 
+        + ResponseHTML(status int, html string) 
+        + ResponseJSON(status int, v <font color=blue>interface</font>{}) 
+        + Next() 
+
+    }
+    interface Handler  {
+        + ServeHTTP(c *Context) 
+
+    }
+    class HandlerFunc << (S,Aquamarine) >> {
+        + ServeHTTP(c *Context) 
+
+    }
+    class HttpServer << (S,Aquamarine) >> {
+        + Handler Handler
+
+        - handleConn(conn net.Conn) 
+
+        + SetHandler(handler Handler) 
+        + ListenAndServe(addr string) error
+        + ListenAndServeTLS(addr string, certFile string, keyFile string) error
+
+    }
+'    interface Lener  {
+'        + Len() int
+'
+'    }
+    class Request << (S,Aquamarine) >> {
+        + Method string
+        + Url string
+        + Version string
+        + Headers <font color=blue>map</font>[string]string
+        + Body io.Reader
+
+        + Parse(conn io.Reader) error
+
+    }
+    class Response << (S,Aquamarine) >> {
+        + Version string
+        + Status int
+        + Reason string
+        + Headers <font color=blue>map</font>[string]string
+        + Body ResponseWriter
+
+        - write(conn io.Writer) error
+
+        + SetStateLine(version string, status int) 
+
+    }
+    interface ResponseWriter  {
+    }
+    interface Router  {
+        + Handle(method string, path string, handlers ...Handler) 
+        + HandleFunc(method string, path string, handlers ...HandlerFunc) 
+        + GET(path string, handlers ...HandlerFunc) 
+        + POST(path string, handlers ...HandlerFunc) 
+        + PUT(path string, handlers ...HandlerFunc) 
+        + DELETE(path string, handlers ...HandlerFunc) 
+        + Use(middlewares ...Handler) 
+
+    }
+    interface Server  {
+        + SetHandler(handler Handler) 
+        + ListenAndServe(addr string) error
+        + ListenAndServeTLS(addr string, certFile string, keyFile string) error
+
+    }
+    class prefixRouter << (S,Aquamarine) >> {
+        - baseURL string
+        - routes []routerItem
+        - middlewares []Handler
+
+        - doRouter(c *Context) 
+        - relativePath(path string) (string, bool)
+
+        + ServeHTTP(c *Context) 
+        + Handle(method string, path string, handlers ...Handler) 
+        + HandleFunc(method string, path string, handlers ...HandlerFunc) 
+        + GET(path string, handlers ...HandlerFunc) 
+        + POST(path string, handlers ...HandlerFunc) 
+        + PUT(path string, handlers ...HandlerFunc) 
+        + DELETE(path string, handlers ...HandlerFunc) 
+        + Use(middlewares ...Handler) 
+
+    }
+    class routerItem << (S,Aquamarine) >> {
+        - method string
+        - path string
+        - handlers []Handler
+
+        - match(method string, path string) int
+
+    }
+    class simplehttp.HandlerFunc << (T, #FF7700) >>  {
+    }
+
+    class FileServer << (S,Aquamarine) >> {
+        - root string
+        - prefix string
+
+        - serveFile(c *Context, path string)
+        - parseRange(c *Context, rangeHeader string, fileSize int64) (start, end int64, err error)
+        - mimeType(path string) string
+
+        + ServeHTTP(c *Context)
+    }
+
+    class Logger << (S,Aquamarine) >> {
+        + ServeHTTP(c *Context)
+    }
+
+    class Recover << (S,Aquamarine) >> {
+        + ServeHTTP(c *Context)
+    }
+
+}
+'"simplehttp.Lener" *-- "extends""simplehttp.ResponseWriter"
+"simplehttp.Handler" *-- "extends""simplehttp.Router"
+
+"simplehttp.Handler" <|-- "implements""simplehttp.HandlerFunc"
+"simplehttp.Server" <|-- "implements""simplehttp.HttpServer"
+"simplehttp.Handler" <|-- "implements""simplehttp.prefixRouter"
+"simplehttp.Router" <|-- "implements""simplehttp.prefixRouter"
+
+"simplehttp.Context""uses" o-- "simplehttp.Handler"
+"simplehttp.Context""uses" o-up- "simplehttp.Request"
+"simplehttp.Context""uses" o-up- "simplehttp.Response"
+'"simplehttp.Context""uses" o-- "sync.Map"
+"simplehttp.HttpServer""uses" o---- "simplehttp.Handler"
+"simplehttp.HttpServer""uses" o-- "simplehttp.ResponseWriter"
+'"simplehttp.Request""uses" o-- "io.Reader"
+"simplehttp.Response""uses" o-- "simplehttp.ResponseWriter"
+"simplehttp.prefixRouter""uses" o-- "simplehttp.Handler"
+"simplehttp.prefixRouter""uses" o-- "simplehttp.routerItem"
+"simplehttp.routerItem""uses" o-- "simplehttp.Handler"
+
+"simplehttp.Handler" <|-down- "implements""simplehttp.Logger"
+"simplehttp.Handler" <|-down- "implements""simplehttp.Recover"
+"simplehttp.Handler" <|--down-- "implements""simplehttp.FileServer"
+
+"simplehttp.<font color=blue>func</font>(*Context) " #.up. "alias of""simplehttp.HandlerFunc"
+@enduml

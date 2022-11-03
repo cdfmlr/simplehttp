@@ -63,6 +63,7 @@ func FileServer(root string, prefix string) HandlerFunc {
 			path = pathLib.Join(path, IndexFile)
 		}
 		path = pathLib.Join(root, path)
+		// fmt.Println("FileServer:", path, c.Request)
 
 		serveFile(c, path)
 	}
@@ -74,7 +75,7 @@ func serveFile(c *Context, path string) {
 	// open file
 	f, err := os.Open(path)
 	if err != nil {
-		c.ResponseText(500, "Internal Server Error")
+		c.ResponseText(404, "Not Found")
 		return
 	}
 	defer f.Close()
@@ -116,7 +117,7 @@ func serveFile(c *Context, path string) {
 	// 	c.Response.Headers["Accept-Ranges"] = "bytes"
 	// }
 
-	// stop
+	// stop,, 不知道为什么 Safari 要加这个才能正常工作
 	if start == end {
 		c.Response.SetStateLine(c.Request.Version, 200)
 		c.Response.Headers["Content-Type"] = mimeType(path)
@@ -168,6 +169,7 @@ func parseRange(c *Context, rangeHeader string, fileSize int64) (start, end int6
 	} else { // bytes=9500-  =>  The final 500 bytes (byte offsets 9500-9999, inclusive)
 		end = fileSize - 1
 	}
+	end += 1 // end is exclusive
 
 	if matches[1] != "" {
 		start, _ = strconv.ParseInt(matches[1], 10, 64)

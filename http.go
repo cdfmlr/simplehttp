@@ -334,10 +334,13 @@ func (c *Context) ResponseJSON(status int, v interface{}) {
 // but it's too long to be cool.
 func Chain(h Handler, middlewares ...Handler) Handler {
 	return HandlerFunc(func(c *Context) { // the INIT_MIDDLEWARE
-		for _, m := range middlewares {
-			c.handlers = append(c.handlers, m)
-		}
-		c.handlers = append(middlewares, h)
+		// fmt.Println("Chain:", h, middlewares)
+		// for _, m := range middlewares {
+		// 	c.handlers = append(c.handlers, m)
+		// }
+		c.handlers = append(c.handlers, middlewares...)
+		c.handlers = append(c.handlers, h)
+		// c.handlers = append(middlewares, h)
 		c.Next()
 	})
 }
